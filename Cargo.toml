@@ -1,11 +1,16 @@
-[package]
-name = "tiny-artifacts"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = ["vendor", "worktrees"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 license = "GPL-3.0-only"
-description = "Shared artifact types, store trait, and tools for versioned agent-generated deliverables."
+repository = "https://github.com/tinyhumansai/tiny-artifacts"
 
-[dependencies]
+[workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-trait = "0.1"
@@ -13,3 +18,32 @@ thiserror = "2"
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 tinytools = { git = "https://github.com/tinyhumansai/tinytools.git" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+doc_markdown = "warn"
+must_use_candidate = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "warn"
+private_intra_doc_links = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
