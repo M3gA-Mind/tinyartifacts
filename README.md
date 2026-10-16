@@ -77,7 +77,7 @@ The service enforces the rules, whoever is calling:
 | `ArtifactStore` | Where records are kept. `FsArtifactStore` is a ready-made one: one JSON file per artifact in a directory, written atomically. |
 | `ArtifactObserver` | Told after every write (`pending`, `ready`, `failed`, `deleted`) — show a card, copy the file where the user can open it. If it fails, the write stands and the caller gets a notice. |
 | `ArtifactPublisher` | How a version is shared (e.g. an upload and a link). Optional. |
-| `FileRoots` | The folders file artifacts may point into. Without any, file artifacts are refused. |
+| `FileRoots` | The folders file artifacts may point into. Without any, file artifacts are refused. `with_guard` lets the host refuse paths inside them (credential stores, its own data). |
 
 ## Agent tools
 

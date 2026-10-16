@@ -8,6 +8,7 @@
 //! points at nothing, or at a file outside its reach (a symlink included).
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -59,6 +60,14 @@ pub enum FileRefError {
     /// The path resolves outside every allowed folder.
     #[error("`{0}` is outside the folders artifacts may reference")]
     OutsideRoots(String),
+    /// The host's guard refused the path (see [`FileRoots::with_guard`]).
+    #[error("`{path}` cannot be referenced: {reason}")]
+    Refused {
+        /// The path as given.
+        path: String,
+        /// Why the host refused it.
+        reason: String,
+    },
     /// The file system refused a lookup.
     #[error("cannot read `{path}`: {source}")]
     Io {
@@ -70,15 +79,43 @@ pub enum FileRefError {
     },
 }
 
+/// A host's last word on a resolved path: `Some(reason)` refuses it.
+pub type PathGuard = Arc<dyn Fn(&Path) -> Option<String> + Send + Sync>;
+
 /// The folders a host lets artifacts reference.
 ///
 /// A relative path is resolved against the first root (the agent's working
 /// folder, typically). Every path is canonicalized before the containment
-/// check, so `..` segments and symlinks cannot reach outside.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// check, so `..` segments and symlinks cannot reach outside. A host can also
+/// refuse paths inside the roots ([`Self::with_guard`]), such as credential
+/// stores under a broad working folder.
+#[derive(Clone, Default)]
 pub struct FileRoots {
     roots: Vec<PathBuf>,
+    guard: Option<PathGuard>,
 }
+
+impl std::fmt::Debug for FileRoots {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileRoots")
+            .field("roots", &self.roots)
+            .field("guard", &self.guard.is_some())
+            .finish()
+    }
+}
+
+impl PartialEq for FileRoots {
+    fn eq(&self, other: &Self) -> bool {
+        let same_guard = match (&self.guard, &other.guard) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        self.roots == other.roots && same_guard
+    }
+}
+
+impl Eq for FileRoots {}
 
 impl FileRoots {
     /// Roots in priority order; the first one anchors relative paths.
@@ -86,7 +123,20 @@ impl FileRoots {
     pub fn new(roots: impl IntoIterator<Item = PathBuf>) -> Self {
         Self {
             roots: roots.into_iter().collect(),
+            guard: None,
         }
+    }
+
+    /// Ask `guard` about every resolved path, after the containment check, on
+    /// its canonical form: `Some(reason)` refuses it with
+    /// [`FileRefError::Refused`].
+    #[must_use]
+    pub fn with_guard(
+        mut self,
+        guard: impl Fn(&Path) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.guard = Some(Arc::new(guard));
+        self
     }
 
     /// The allowed folders.
@@ -137,6 +187,12 @@ impl FileRoots {
         }
         if !inside {
             return Err(FileRefError::OutsideRoots(raw.to_string()));
+        }
+        if let Some(reason) = self.guard.as_ref().and_then(|guard| guard(&canonical)) {
+            return Err(FileRefError::Refused {
+                path: raw.to_string(),
+                reason,
+            });
         }
         let meta = tokio::fs::metadata(&canonical)
             .await

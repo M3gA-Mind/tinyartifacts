@@ -41,7 +41,7 @@ pub mod types;
 
 pub use diff::{ArtifactDiff, DiffLine, DiffOp, MAX_DIFF_LINES};
 pub use events::{ArtifactEvent, ArtifactEventKind, ArtifactObserver};
-pub use file_ref::{media_type_for, FileRef, FileRefError, FileRoots};
+pub use file_ref::{media_type_for, FileRef, FileRefError, FileRoots, PathGuard};
 pub use fs_store::FsArtifactStore;
 pub use publish::{ArtifactPublisher, PublishOptions};
 pub use service::{Artifacts, ArtifactsError, Author, Content, Published, Saved};

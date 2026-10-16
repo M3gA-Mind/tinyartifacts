@@ -99,3 +99,46 @@ async fn a_path_that_cannot_be_read_is_an_io_error() {
         assert!(err.to_string().contains("locked/f.txt"));
     }
 }
+
+#[tokio::test]
+async fn the_host_guard_refuses_a_path_inside_the_roots() {
+    let root = dir();
+    std::fs::create_dir_all(root.join(".ssh")).unwrap();
+    std::fs::write(root.join(".ssh").join("id_ed25519"), b"key").unwrap();
+    std::fs::write(root.join("notes.txt"), b"fine").unwrap();
+    let roots = FileRoots::new([root.clone()]).with_guard(|path| {
+        path.components()
+            .any(|c| c.as_os_str() == ".ssh")
+            .then(|| "a credential store".to_string())
+    });
+
+    // Checked on the canonical path, whatever the spelling.
+    for raw in [".ssh/id_ed25519", "./.ssh/id_ed25519"] {
+        let result = roots.resolve(raw).await;
+        assert!(
+            matches!(
+                &result,
+                Err(FileRefError::Refused { path, reason })
+                    if path == raw && reason == "a credential store"
+            ),
+            "{raw}: {result:?}"
+        );
+    }
+    let err = roots.resolve(".ssh/id_ed25519").await.unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("cannot be referenced: a credential store"));
+    assert!(roots.resolve("notes.txt").await.is_ok());
+}
+
+#[test]
+fn a_guard_shows_in_debug_and_equality() {
+    let plain = FileRoots::new([PathBuf::from("/a")]);
+    let guarded = plain.clone().with_guard(|_| None);
+    assert!(format!("{guarded:?}").contains("guard: true"));
+    assert!(format!("{plain:?}").contains("guard: false"));
+    assert_ne!(plain, guarded);
+    assert_eq!(guarded, guarded.clone());
+    assert_eq!(plain, FileRoots::new([PathBuf::from("/a")]));
+    assert_ne!(guarded, plain.clone().with_guard(|_| None));
+}
