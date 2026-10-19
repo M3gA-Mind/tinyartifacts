@@ -6,6 +6,10 @@ use tinystoragedrivers_core::schema::{Owner, Schema, ScopeClass};
 ///
 /// Hosts compose this with their other storage schemas so the driver can
 /// reserve the `artifacts/` prefix in the same scope used for artifact data.
+///
+/// # Panics
+///
+/// This panics only if the hard-coded owner name ceases to be valid.
 #[must_use]
 #[expect(
     clippy::expect_used,

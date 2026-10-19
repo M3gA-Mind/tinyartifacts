@@ -1,4 +1,4 @@
-//! Durable bytes behind [`FileRef`](crate::FileRef) keys.
+//! Durable bytes behind [`FileRef`] keys.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -54,7 +54,7 @@ pub struct BlobFileStore {
 impl BlobFileStore {
     /// Adapt the blobs in `storage` to the artifact file-store port.
     #[must_use]
-    pub fn new(storage: ScopedStorage) -> Self {
+    pub fn new(storage: &ScopedStorage) -> Self {
         Self {
             blobs: storage.blobs().clone(),
         }

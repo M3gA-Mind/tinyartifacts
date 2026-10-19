@@ -78,7 +78,7 @@ async fn separate_services_read_share_and_delete_shared_file_versions() {
     let backend = MemoryStorage::new();
     let first_storage = backend.for_scope(&Scope::local()).unwrap();
     let first_blobs = first_storage.blobs().clone();
-    let first_files = Arc::new(BlobFileStore::new(first_storage));
+    let first_files = Arc::new(BlobFileStore::new(&first_storage));
     let first = Artifacts::new(Arc::new(records.clone()))
         .with_file_roots(FileRoots::new([input.clone()]))
         .with_file_store(first_files.clone());
@@ -122,7 +122,7 @@ async fn separate_services_read_share_and_delete_shared_file_versions() {
 
     let second_storage = backend.for_scope(&Scope::local()).unwrap();
     let second_blobs = second_storage.blobs().clone();
-    let second_files = Arc::new(BlobFileStore::new(second_storage));
+    let second_files = Arc::new(BlobFileStore::new(&second_storage));
     let second = Artifacts::new(Arc::new(records.clone()))
         .with_file_store(second_files.clone())
         .with_publisher(Arc::new(ReadingPublisher(second_blobs.clone())));

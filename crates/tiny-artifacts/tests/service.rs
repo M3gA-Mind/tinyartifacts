@@ -14,7 +14,8 @@ use tiny_artifacts::{
     ArtifactAuthor, ArtifactEvent, ArtifactEventKind, ArtifactKind, ArtifactObserver,
     ArtifactPublisher, ArtifactRecord, ArtifactStatus, ArtifactStore, ArtifactVersion, Artifacts,
     ArtifactsError, Author, Content, CreateArtifactTool, DeleteArtifactTool, FileRefError,
-    FileRoots, FsFileStore, PublishOptions, PublishedLink, ShareArtifactTool, UpdateArtifactTool,
+    FileRoots, FileStore, FsFileStore, PublishOptions, PublishedLink, ShareArtifactTool,
+    UpdateArtifactTool,
 };
 use tinytools::Tool;
 

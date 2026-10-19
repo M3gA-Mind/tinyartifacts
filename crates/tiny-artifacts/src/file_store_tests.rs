@@ -34,8 +34,11 @@ async fn filesystem_store_reads_metadata_and_deletes_by_artifact_prefix() {
 #[tokio::test]
 async fn blob_adapters_share_objects_across_instances() {
     let backend = MemoryStorage::new();
-    let first = BlobFileStore::new(backend.for_scope(&Scope::local()).unwrap());
-    let second = BlobFileStore::new(backend.for_scope(&Scope::local()).unwrap());
+    let scope = Scope::local();
+    let first_storage = backend.for_scope(&scope).unwrap();
+    let second_storage = backend.for_scope(&scope).unwrap();
+    let first = BlobFileStore::new(&first_storage);
+    let second = BlobFileStore::new(&second_storage);
 
     first
         .put("artifacts/a/v1.txt", b"notes", None)
@@ -106,7 +109,8 @@ async fn legacy_path_references_import_only_from_allowed_roots() {
     .is_err());
 
     let backend = MemoryStorage::new();
-    let blob_store = BlobFileStore::new(backend.for_scope(&Scope::local()).unwrap());
+    let storage = backend.for_scope(&Scope::local()).unwrap();
+    let blob_store = BlobFileStore::new(&storage);
     let imported_blob = import_legacy_file(
         &blob_store,
         &FileRoots::new([old_root]),
