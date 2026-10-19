@@ -66,9 +66,10 @@ The service enforces the rules, whoever is calling:
 - **Slow producers** open an artifact with `begin` (status `pending`, no
   version yet), then `revise` to complete it or `fail` it with a reason.
 - **File versions keep their bytes** through `FileStore`: each version is
-  written under `artifacts/<id>/v<N>.<ext>` and its record carries the storage
-  key, so a producer that overwrites its input file does not change earlier
-  versions. Deleting an artifact removes every object under its key prefix.
+  written under `artifacts/files/<id>/v<N>.<ext>` and its record carries the
+  storage key, so a producer that overwrites its input file does not change
+  earlier versions. Deleting an artifact removes every object under its key
+  prefix.
 - **Sharing** (`publish`) checks the stored object through `FileStore`, records
   the link on the version it shared and reuses a live link instead of sharing
   again. A host publisher can read the same object by its `FileRef` key.
@@ -85,9 +86,9 @@ The service enforces the rules, whoever is calling:
 | `FileRoots` | Allowed input folders. Paths are canonicalized and checked before a file store reads them; `with_guard` can refuse paths inside them (credential stores, its own data). |
 
 Older records that serialized `FileRef.path` still deserialize. A host importing
-those records into a file store can use `FsFileStore::import_legacy_file` with
-the old allowed roots; the imported record should then be saved with the new
-key returned by that method.
+those records into any file store can use `tiny_artifacts::import_legacy_file`
+with the old allowed roots; the imported record should then be saved with the
+new key returned by that function.
 
 ## Agent tools
 
