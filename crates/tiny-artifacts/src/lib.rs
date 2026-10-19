@@ -21,10 +21,16 @@
 //!
 //! ```rust,no_run
 //! use std::sync::Arc;
-//! use tiny_artifacts::{registered_tools, ArtifactStore, Artifacts, Author, FileRoots};
+//! use tiny_artifacts::{
+//!     registered_tools, ArtifactStore, Artifacts, Author, FileRoots, FsFileStore,
+//! };
 //!
 //! fn tools(store: Arc<dyn ArtifactStore>, workdir: std::path::PathBuf) {
-//!     let artifacts = Arc::new(Artifacts::new(store).with_file_roots(FileRoots::new([workdir])));
+//!     let artifacts = Arc::new(
+//!         Artifacts::new(store)
+//!             .with_file_roots(FileRoots::new([workdir]))
+//!             .with_file_store(Arc::new(FsFileStore::new("data/artifact-files"))),
+//!     );
 //!     let _tools = registered_tools(artifacts, Author::agent("my-agent"));
 //! }
 //! ```
@@ -32,20 +38,24 @@
 mod diff;
 pub mod events;
 pub mod file_ref;
+pub mod file_store;
 pub mod fs_store;
 pub mod publish;
 pub mod service;
 pub mod store;
+pub mod storage;
 pub mod tools;
 pub mod types;
 
 pub use diff::{ArtifactDiff, DiffLine, DiffOp, MAX_DIFF_LINES};
 pub use events::{ArtifactEvent, ArtifactEventKind, ArtifactObserver};
-pub use file_ref::{media_type_for, FileRef, FileRefError, FileRoots, PathGuard};
+pub use file_ref::{media_type_for, FileRef, FileRefError, FileRoots, PathGuard, ResolvedFile};
+pub use file_store::{import_legacy_file, BlobFileStore, FileMetadata, FileStore, FsFileStore};
 pub use fs_store::FsArtifactStore;
 pub use publish::{ArtifactPublisher, PublishOptions};
 pub use service::{Artifacts, ArtifactsError, Author, Content, Published, Saved};
 pub use store::ArtifactStore;
+pub use storage::storage_schema;
 pub use tools::{
     registered_tools, CreateArtifactTool, DeleteArtifactTool, ListArtifactsTool, ReadArtifactTool,
     ShareArtifactTool, UpdateArtifactTool,

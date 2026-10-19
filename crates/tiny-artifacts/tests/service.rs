@@ -13,6 +13,7 @@ use serde_json::json;
 use tiny_artifacts::{
     ArtifactAuthor, ArtifactEvent, ArtifactEventKind, ArtifactKind, ArtifactObserver,
     ArtifactPublisher, ArtifactRecord, ArtifactStatus, ArtifactStore, ArtifactVersion, Artifacts,
+    FsFileStore,
     ArtifactsError, Author, Content, CreateArtifactTool, DeleteArtifactTool, FileRefError,
     FileRoots, PublishOptions, PublishedLink, ShareArtifactTool, UpdateArtifactTool,
 };
@@ -103,7 +104,8 @@ fn service(root: &Path) -> (Arc<Artifacts>, Arc<Recorder>) {
     let recorder = Arc::new(Recorder::default());
     let artifacts = Artifacts::new(Arc::new(MemStore::default()))
         .with_observer(recorder.clone())
-        .with_file_roots(FileRoots::new([root.to_path_buf()]));
+        .with_file_roots(FileRoots::new([root.to_path_buf()]))
+        .with_file_store(Arc::new(FsFileStore::new(workdir())));
     (Arc::new(artifacts), recorder)
 }
 
@@ -130,11 +132,11 @@ async fn an_image_is_filed_by_path_with_a_checked_reference() {
     let id = data["artifact_id"].as_str().unwrap();
     let record = artifacts.get(id).await.unwrap().unwrap();
     let file = record.latest().unwrap().file.clone().unwrap();
-    assert!(file.path.ends_with("chart.png"));
+    assert!(file.key.ends_with("v1.png"));
     assert_eq!(file.size_bytes, 9);
     assert_eq!(file.media_type.as_deref(), Some("image/png"));
     // Older readers still find the path in `body`.
-    assert_eq!(record.latest().unwrap().body, file.path);
+    assert_eq!(record.latest().unwrap().body, file.key);
     assert_eq!(
         *recorder.events.lock().unwrap(),
         vec![(ArtifactEventKind::Ready, ArtifactStatus::Ready, 1)]
@@ -193,6 +195,22 @@ async fn a_file_that_is_missing_a_directory_or_outside_is_refused() {
         matches!(err, ArtifactsError::File(FileRefError::NoRoots)),
         "{err}"
     );
+
+    let root = workdir();
+    std::fs::write(root.join("x"), b"file").unwrap();
+    let without_file_store = Artifacts::new(Arc::new(MemStore::default()))
+        .with_file_roots(FileRoots::new([root]));
+    let err = without_file_store
+        .create(
+            ArtifactKind::File,
+            "F",
+            Content::File("x".into()),
+            &Author::agent("a"),
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ArtifactsError::NoFileStore), "{err}");
 }
 
 #[tokio::test]
@@ -442,12 +460,13 @@ async fn an_expired_link_is_replaced() {
 }
 
 #[tokio::test]
-async fn an_older_file_version_is_shared_only_while_its_file_is_unchanged() {
+async fn an_older_file_version_remains_shareable_after_its_source_changes() {
     let root = workdir();
     std::fs::write(root.join("deck.pptx"), b"v1").unwrap();
     let artifacts = Artifacts::new(Arc::new(MemStore::default()))
         .with_publisher(Arc::new(FakePublisher::default()))
-        .with_file_roots(FileRoots::new([root.clone()]));
+        .with_file_roots(FileRoots::new([root.clone()]))
+        .with_file_store(Arc::new(FsFileStore::new(workdir())));
     let id = artifacts
         .create(
             ArtifactKind::File,
@@ -473,10 +492,14 @@ async fn an_older_file_version_is_shared_only_while_its_file_is_unchanged() {
         .unwrap();
 
     let options = PublishOptions::default();
-    assert!(matches!(
-        artifacts.publish(&id, Some(1), &options).await,
-        Err(ArtifactsError::FileChanged { version: 1, .. })
-    ));
+    assert_eq!(
+        artifacts
+            .publish(&id, Some(1), &options)
+            .await
+            .unwrap()
+            .version,
+        1
+    );
     assert_eq!(
         artifacts
             .publish(&id, None, &options)
@@ -647,7 +670,7 @@ fn the_service_debug_view_shows_its_wiring_not_its_contents() {
 }
 
 #[tokio::test]
-async fn with_version_files_each_version_keeps_its_own_bytes() {
+async fn the_file_store_keeps_each_version_after_the_source_changes() {
     let root = workdir();
     let kept = workdir();
     std::fs::write(root.join("deck.pptx"), b"v1").unwrap();
@@ -681,14 +704,14 @@ async fn with_version_files_each_version_keeps_its_own_bytes() {
         .record;
 
     let file_of = |n: u32| record.version(n).unwrap().file.clone().unwrap();
-    assert_eq!(std::fs::read(&file_of(1).path).unwrap(), b"v1");
-    assert_eq!(std::fs::read(&file_of(2).path).unwrap(), b"v2-longer");
+    let file_store = FsFileStore::new(&kept);
+    assert_eq!(file_store.read(&file_of(1).key).await.unwrap(), b"v1");
     assert_eq!(
-        Path::new(&file_of(1).path),
-        kept.join(&id).join("v1.pptx").as_path()
+        file_store.read(&file_of(2).key).await.unwrap(),
+        b"v2-longer"
     );
     assert_eq!(file_of(2).size_bytes, 9);
-    assert_eq!(record.version(1).unwrap().body, file_of(1).path);
+    assert_eq!(record.version(1).unwrap().body, file_of(1).key);
     // The older version still shows what it was, so it can be shared.
     let options = PublishOptions::default();
     assert_eq!(
@@ -721,10 +744,10 @@ async fn deleting_an_artifact_removes_its_version_files() {
         .unwrap();
     let id = saved.record.id;
     // No extension: the copy is just the version number.
-    assert!(kept.join(&id).join("v1").is_file());
+    assert!(kept.join("artifacts").join(&id).join("v1").is_file());
 
     assert!(artifacts.delete(&id).await.unwrap().0);
-    assert!(!kept.join(&id).exists());
+    assert!(!kept.join("artifacts").join(&id).exists());
     // Deleting again finds nothing and touches nothing.
     assert!(!artifacts.delete(&id).await.unwrap().0);
 }
@@ -768,5 +791,5 @@ async fn text_versions_are_not_copied() {
     assert!(saved.record.latest().unwrap().file.is_none());
     assert!(!kept.join(&saved.record.id).exists());
     let shown = format!("{artifacts:?}");
-    assert!(shown.contains("version_files: Some"), "{shown}");
+    assert!(shown.contains("file_store: true"), "{shown}");
 }

@@ -51,4 +51,7 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # `tinytools` (the tool vocabulary the agent tools implement) is first-party and
 # consumed from its repository.
-allow-git = ["https://github.com/tinyhumansai/tinytools.git"]
+allow-git = [
+    "https://github.com/tinyhumansai/tinytools.git",
+    "https://github.com/tinyhumansai/tinystoragedrivers.git",
+]

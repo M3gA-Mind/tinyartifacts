@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::events::{ArtifactEvent, ArtifactEventKind, ArtifactObserver};
 use crate::file_ref::{FileRef, FileRefError, FileRoots};
+use crate::file_store::FileStore;
 use crate::publish::{ArtifactPublisher, PublishOptions};
 use crate::store::ArtifactStore;
 use crate::types::{
@@ -131,6 +132,9 @@ pub enum ArtifactsError {
     /// The store or the publisher failed.
     #[error(transparent)]
     Backend(#[from] anyhow::Error),
+    /// File content needs a configured durable file store.
+    #[error("this host has no file store for artifact files")]
+    NoFileStore,
 }
 
 /// The artifact service: one store, plus the host's observer, publisher and
@@ -141,7 +145,7 @@ pub struct Artifacts {
     observer: Option<Arc<dyn ArtifactObserver>>,
     publisher: Option<Arc<dyn ArtifactPublisher>>,
     files: FileRoots,
-    version_files: Option<PathBuf>,
+    file_store: Option<Arc<dyn FileStore>>,
 }
 
 impl std::fmt::Debug for Artifacts {
@@ -150,7 +154,7 @@ impl std::fmt::Debug for Artifacts {
             .field("observer", &self.observer.is_some())
             .field("publisher", &self.publisher.is_some())
             .field("files", &self.files)
-            .field("version_files", &self.version_files)
+            .field("file_store", &self.file_store.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -165,7 +169,7 @@ impl Artifacts {
             observer: None,
             publisher: None,
             files: FileRoots::default(),
-            version_files: None,
+            file_store: None,
         }
     }
 
@@ -190,16 +194,20 @@ impl Artifacts {
         self
     }
 
-    /// Keep a copy of every file version under `dir`, as
-    /// `<dir>/<artifact id>/v<version>.<extension>`, and point the version at
-    /// that copy. Without it a version points at the file it was given, and a
-    /// later change to that file changes what the version shows.
+    /// Store file artifacts in `file_store` under generated artifact keys.
+    #[must_use]
+    pub fn with_file_store(mut self, file_store: Arc<dyn FileStore>) -> Self {
+        self.file_store = Some(file_store);
+        self
+    }
+
+    /// Configure the built-in filesystem file store rooted at `dir`.
     ///
-    /// The copies belong to the service: [`Self::delete`] removes an
-    /// artifact's copies with it.
+    /// Prefer [`Self::with_file_store`] when the host already has a durable
+    /// shared blob backend.
     #[must_use]
     pub fn with_version_files(mut self, dir: impl Into<PathBuf>) -> Self {
-        self.version_files = Some(dir.into());
+        self.file_store = Some(Arc::new(crate::FsFileStore::new(dir)));
         self
     }
 
@@ -249,8 +257,9 @@ impl Artifacts {
         id: Option<String>,
     ) -> Result<Saved, ArtifactsError> {
         let at = crate::now_millis();
+        let id = id.unwrap_or_else(new_id);
         let version = self.version_for(kind, content, author, at).await?;
-        let mut record = ArtifactRecord::pending(id.unwrap_or_else(new_id), title.trim(), kind, at);
+        let mut record = ArtifactRecord::pending(id, title.trim(), kind, at);
         record.push_version(version);
         self.keep_version_file(&mut record).await?;
         record.status = ArtifactStatus::Ready;
@@ -398,9 +407,14 @@ impl Artifacts {
         // only be shared while its file is still the one it recorded.
         if Some(wanted.version) != newest {
             if let Some(file) = wanted.file.as_ref() {
-                let unchanged = tokio::fs::metadata(&file.path)
-                    .await
-                    .is_ok_and(|meta| meta.is_file() && meta.len() == file.size_bytes);
+                let unchanged = if let Some(file_store) = &self.file_store {
+                    file_store
+                        .metadata(&file.key)
+                        .await?
+                        .is_some_and(|meta| meta.size_bytes == file.size_bytes)
+                } else {
+                    false
+                };
                 if !unchanged {
                     return Err(ArtifactsError::FileChanged {
                         id: id.to_string(),
@@ -426,55 +440,63 @@ impl Artifacts {
         })
     }
 
-    /// With [`Self::with_version_files`], copy the newest version's file into
-    /// the version-file folder and point the version at the copy.
+    /// Persist the newest file version under a stable key and update its ref.
     async fn keep_version_file(&self, record: &mut ArtifactRecord) -> Result<(), ArtifactsError> {
-        let Some(dir) = &self.version_files else {
-            return Ok(());
+        let Some(file_store) = &self.file_store else {
+            return if record.kind.holds_file() {
+                Err(ArtifactsError::NoFileStore)
+            } else {
+                Ok(())
+            };
         };
         let id = record.id.clone();
-        // The id names the copies' folder.
         crate::fs_store::validate_id(&id)?;
+        let holds_file = record.kind.holds_file();
         let Some(version) = record.versions.last_mut() else {
             return Ok(());
         };
-        let Some(file) = &version.file else {
+        if !holds_file || version.file.is_some() {
             return Ok(());
-        };
-        let name = match file.extension() {
+        }
+        let source = self.files.resolve(&version.body).await?;
+        let name = match source.path.extension().and_then(|ext| ext.to_str()) {
             Some(ext) => format!("v{}.{ext}", version.version),
             None => format!("v{}", version.version),
         };
-        let folder = dir.join(&id);
-        let copy = folder.join(name);
-        tokio::fs::create_dir_all(&folder)
+        let key = format!("artifacts/{id}/{name}");
+        let bytes = tokio::fs::read(&source.path)
             .await
-            .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", folder.display()))?;
-        tokio::fs::copy(&file.path, &copy).await.map_err(|e| {
-            anyhow::anyhow!("cannot keep version {} of `{id}`: {e}", version.version)
-        })?;
+            .map_err(anyhow::Error::from)?;
+        let metadata = file_store
+            .put(&key, &bytes, source.media_type.as_deref())
+            .await?;
+        if metadata.size_bytes != source.size_bytes {
+            return Err(ArtifactsError::Backend(anyhow::anyhow!(
+                "file changed while artifact version {} was being stored",
+                version.version
+            )));
+        }
         let kept = FileRef {
-            path: copy.display().to_string(),
-            size_bytes: file.size_bytes,
-            media_type: file.media_type.clone(),
+            key: key.clone(),
+            size_bytes: metadata.size_bytes,
+            media_type: metadata.media_type,
         };
-        version.body.clone_from(&kept.path);
+        version.body = key;
         version.file = Some(kept);
         Ok(())
     }
 
-    /// Remove a deleted artifact's version-file copies. Best-effort: the
-    /// record is already gone.
+    /// Remove a deleted artifact's stored files. Best-effort: the record is
+    /// already gone.
     async fn drop_version_files(&self, id: &str) {
-        let Some(dir) = &self.version_files else {
+        let Some(file_store) = &self.file_store else {
             return;
         };
         if crate::fs_store::validate_id(id).is_err() {
             return;
         }
-        match tokio::fs::remove_dir_all(dir.join(id)).await {
+        match file_store.delete_prefix(&format!("artifacts/{id}/")).await {
             Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => tracing::warn!(
                 target: "tiny-artifacts",
                 artifact_id = id,
@@ -513,10 +535,13 @@ impl Artifacts {
             }
             (true, Content::File(path)) => {
                 let file = self.files.resolve(&path).await?;
-                let mut version =
-                    ArtifactVersion::new(0, file.path.clone(), author.kind, author.id.clone(), at);
-                version.file = Some(file);
-                Ok(version)
+                Ok(ArtifactVersion::new(
+                    0,
+                    file.path.to_string_lossy(),
+                    author.kind,
+                    author.id.clone(),
+                    at,
+                ))
             }
             (false, Content::File(_)) => Err(ArtifactsError::WrongContent {
                 kind: kind.as_str(),

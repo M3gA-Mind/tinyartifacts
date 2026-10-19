@@ -28,19 +28,20 @@ async fn a_resolved_reference_knows_its_name_extension_and_type() {
     assert_eq!(file.size_bytes, 4);
 
     let bare = FileRef {
-        path: "/tmp/README".into(),
+        key: "artifacts/a/README".into(),
         size_bytes: 0,
         media_type: None,
     };
     assert_eq!(bare.extension(), None);
 }
 
-#[tokio::test]
-async fn a_file_reference_serializes_a_storage_key_instead_of_a_host_path() {
-    let root = dir();
-    std::fs::write(root.join("Report.PDF"), b"%PDF").unwrap();
-
-    let file = FileRoots::new([root]).resolve("Report.PDF").await.unwrap();
+#[test]
+fn a_file_reference_serializes_a_storage_key_instead_of_a_host_path() {
+    let file = FileRef {
+        key: "artifacts/report/v1.pdf".into(),
+        size_bytes: 4,
+        media_type: Some("application/pdf".into()),
+    };
     let serialized = serde_json::to_value(&file).unwrap();
 
     assert!(serialized.get("key").is_some(), "{serialized}");
