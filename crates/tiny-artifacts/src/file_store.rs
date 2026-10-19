@@ -133,7 +133,7 @@ impl FsFileStore {
         let path = root.join(key);
         let parent = path.parent().context("file key has no parent")?;
         if create_parent {
-            tokio::fs::create_dir_all(parent).await?;
+            create_parent_directories(&root, key).await?;
         }
         let canonical_parent = match tokio::fs::canonicalize(parent).await {
             Ok(parent) => parent,
@@ -170,6 +170,32 @@ impl FsFileStore {
         }
         Ok(canonical_parent.join(path.file_name().context("file key has no name")?))
     }
+}
+
+async fn create_parent_directories(root: &Path, key: &str) -> Result<()> {
+    let mut directory = root.to_path_buf();
+    let mut segments = key.split('/').peekable();
+    while let Some(segment) = segments.next() {
+        if segments.peek().is_none() {
+            break;
+        }
+        let candidate = directory.join(segment);
+        match tokio::fs::create_dir(&candidate).await {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("cannot create {}", candidate.display()));
+            }
+        }
+        directory = tokio::fs::canonicalize(&candidate)
+            .await
+            .with_context(|| format!("cannot resolve {}", candidate.display()))?;
+        if !directory.starts_with(root) {
+            bail!("file key escapes the configured store root: {key:?}");
+        }
+    }
+    Ok(())
 }
 
 #[async_trait]
