@@ -246,6 +246,12 @@ fn validate_key(key: &str) -> Result<()> {
     if key.is_empty() || key.starts_with('/') || key.contains('\\') || key.contains('\0') {
         bail!("invalid file key {key:?}");
     }
+    if key
+        .split('/')
+        .any(|segment| segment.is_empty() || segment == ".")
+    {
+        bail!("file key must use canonical path segments: {key:?}");
+    }
     if Path::new(key).components().any(|part| {
         matches!(
             part,
@@ -264,7 +270,7 @@ fn validate_prefix(prefix: &str) -> Result<()> {
     if !prefix.ends_with('/') {
         bail!("file key directory prefix must end with `/`: {prefix:?}");
     }
-    validate_key(prefix.trim_end_matches('/'))
+    validate_key(&prefix[..prefix.len() - 1])
 }
 
 /// Copy a legacy path-based reference into any configured file store.
