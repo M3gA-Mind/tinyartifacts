@@ -46,7 +46,9 @@ async fn a_file_reference_serializes_a_storage_key_instead_of_a_host_path() {
     assert!(serialized.get("key").is_some(), "{serialized}");
     assert!(serialized.get("path").is_none(), "{serialized}");
     assert_eq!(
-        serialized.get("sizeBytes").and_then(|value| value.as_u64()),
+        serialized
+            .get("sizeBytes")
+            .and_then(serde_json::Value::as_u64),
         Some(4)
     );
 }
