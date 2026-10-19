@@ -81,6 +81,8 @@ async fn filesystem_store_refuses_symlinked_directories_outside_root() {
     assert!(store.put("escape/new.txt", b"bad", None).await.is_err());
     assert!(store.read("escape/keep.txt").await.is_err());
     assert!(store.delete_prefix("escape/").await.is_err());
+    assert!(store.metadata("escape/not-created/file.txt").await.is_err());
+    assert!(store.delete_prefix("escape/not-created/").await.is_err());
     assert_eq!(std::fs::read(outside.join("keep.txt")).unwrap(), b"safe");
     assert!(!outside.join("new.txt").exists());
 }

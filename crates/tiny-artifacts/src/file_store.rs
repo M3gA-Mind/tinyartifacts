@@ -138,7 +138,27 @@ impl FsFileStore {
         let canonical_parent = match tokio::fs::canonicalize(parent).await {
             Ok(parent) => parent,
             Err(error) if !create_parent && error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(root.join(key));
+                let mut ancestor = parent;
+                let canonical_ancestor = loop {
+                    match tokio::fs::canonicalize(ancestor).await {
+                        Ok(canonical) => break canonical,
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            ancestor = ancestor
+                                .parent()
+                                .context("file key parent is outside the store")?;
+                        }
+                        Err(error) => return Err(error.into()),
+                    }
+                };
+                if !canonical_ancestor.starts_with(&root) {
+                    bail!("file key escapes the configured store root: {key:?}");
+                }
+                let missing = parent
+                    .strip_prefix(ancestor)
+                    .context("file key parent is outside the store")?;
+                return Ok(canonical_ancestor
+                    .join(missing)
+                    .join(path.file_name().context("file key has no name")?));
             }
             Err(error) => {
                 return Err(error)

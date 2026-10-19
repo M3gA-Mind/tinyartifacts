@@ -744,10 +744,15 @@ async fn deleting_an_artifact_removes_its_version_files() {
         .unwrap();
     let id = saved.record.id;
     // No extension: the copy is just the version number.
-    assert!(kept.join("artifacts").join(&id).join("v1").is_file());
+    assert!(kept
+        .join("artifacts")
+        .join("files")
+        .join(&id)
+        .join("v1")
+        .is_file());
 
     assert!(artifacts.delete(&id).await.unwrap().0);
-    assert!(!kept.join("artifacts").join(&id).exists());
+    assert!(!kept.join("artifacts").join("files").join(&id).exists());
     // Deleting again finds nothing and touches nothing.
     assert!(!artifacts.delete(&id).await.unwrap().0);
 }
