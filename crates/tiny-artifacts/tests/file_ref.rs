@@ -35,6 +35,19 @@ async fn a_resolved_reference_knows_its_name_extension_and_type() {
     assert_eq!(bare.extension(), None);
 }
 
+#[tokio::test]
+async fn a_file_reference_serializes_a_storage_key_instead_of_a_host_path() {
+    let root = dir();
+    std::fs::write(root.join("Report.PDF"), b"%PDF").unwrap();
+
+    let file = FileRoots::new([root]).resolve("Report.PDF").await.unwrap();
+    let serialized = serde_json::to_value(&file).unwrap();
+
+    assert!(serialized.get("key").is_some(), "{serialized}");
+    assert!(serialized.get("path").is_none(), "{serialized}");
+    assert_eq!(serialized.get("sizeBytes").and_then(|value| value.as_u64()), Some(4));
+}
+
 #[test]
 fn media_types_cover_the_common_artifact_formats() {
     let cases = [
