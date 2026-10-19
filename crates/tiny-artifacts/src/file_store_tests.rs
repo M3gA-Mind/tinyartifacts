@@ -42,6 +42,7 @@ async fn blob_adapters_share_objects_across_instances() {
     let second_storage = backend.for_scope(&scope).unwrap();
     let first = BlobFileStore::new(&first_storage);
     let second = BlobFileStore::new(&second_storage);
+    assert!(format!("{first:?}").contains("BlobFileStore"));
 
     first
         .put("artifacts/files/a/v1.txt", b"notes", None)
@@ -214,6 +215,13 @@ async fn filesystem_store_reports_missing_paths_and_storage_errors() {
     let stored = "artifacts/files/a/v1.txt";
     store.put(stored, b"data", None).await.unwrap();
     assert!(store.delete_prefix(&format!("{stored}/")).await.is_err());
+
+    assert_eq!(store.metadata("artifacts/files/a").await.unwrap(), None);
+    assert!(store
+        .put("artifacts/files/a", b"replace directory", None)
+        .await
+        .is_err());
+    assert_eq!(store.read(stored).await.unwrap(), b"data");
 }
 
 #[test]
