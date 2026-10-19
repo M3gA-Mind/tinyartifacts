@@ -42,12 +42,18 @@ async fn blob_adapters_share_objects_across_instances() {
     let second_storage = backend.for_scope(&scope).unwrap();
     let first = BlobFileStore::new(&first_storage);
     let second = BlobFileStore::new(&second_storage);
-    assert!(format!("{first:?}").contains("BlobFileStore"));
-
     first
         .put("artifacts/files/a/v1.txt", b"notes", None)
         .await
         .unwrap();
+    first
+        .put("artifacts/files/private-key.txt", b"private payload", None)
+        .await
+        .unwrap();
+    let debug = format!("{first:?}");
+    assert!(debug.contains("BlobFileStore"));
+    assert!(!debug.contains("private-key.txt"));
+    assert!(!debug.contains("private payload"));
 
     assert_eq!(
         second.read("artifacts/files/a/v1.txt").await.unwrap(),
