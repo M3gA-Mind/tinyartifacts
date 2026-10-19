@@ -90,6 +90,42 @@ async fn blob_store_reports_missing_objects_and_rejects_invalid_keys_and_prefixe
 }
 
 #[tokio::test]
+async fn prefix_deletion_requires_a_directory_boundary_in_both_stores() {
+    let backend = MemoryStorage::new();
+    let storage = backend.for_scope(&Scope::local()).unwrap();
+    let blobs = BlobFileStore::new(&storage);
+    let fs = FsFileStore::new(temp_dir());
+
+    for store in [&blobs as &dyn FileStore, &fs as &dyn FileStore] {
+        store
+            .put("artifacts/files/a/v1.txt", b"a", None)
+            .await
+            .unwrap();
+        store
+            .put("artifacts/files/ab/v1.txt", b"ab", None)
+            .await
+            .unwrap();
+
+        assert!(store.delete_prefix("artifacts/files/a").await.is_err());
+        assert_eq!(store.read("artifacts/files/a/v1.txt").await.unwrap(), b"a");
+        assert_eq!(
+            store.read("artifacts/files/ab/v1.txt").await.unwrap(),
+            b"ab"
+        );
+        store.delete_prefix("artifacts/files/a/").await.unwrap();
+        assert!(store
+            .metadata("artifacts/files/a/v1.txt")
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            store.read("artifacts/files/ab/v1.txt").await.unwrap(),
+            b"ab"
+        );
+    }
+}
+
+#[tokio::test]
 async fn filesystem_store_refuses_traversal_keys() {
     let store = FsFileStore::new(temp_dir());
     assert!(store.put("../outside", b"bad", None).await.is_err());
