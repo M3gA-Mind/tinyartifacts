@@ -19,7 +19,10 @@ async fn filesystem_store_reads_metadata_and_deletes_by_artifact_prefix() {
 
     assert_eq!(metadata.size_bytes, 9);
     assert_eq!(metadata.media_type.as_deref(), Some("image/png"));
-    assert_eq!(store.read("artifacts/a/v1.png").await.unwrap(), b"png bytes");
+    assert_eq!(
+        store.read("artifacts/a/v1.png").await.unwrap(),
+        b"png bytes"
+    );
     assert_eq!(
         store.metadata("artifacts/a/v1.png").await.unwrap(),
         Some(metadata)
@@ -89,8 +92,8 @@ async fn legacy_path_references_import_only_from_allowed_roots() {
         &legacy,
         "artifacts/a/v1.pdf",
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
     assert_eq!(imported.key, "artifacts/a/v1.pdf");
     assert_eq!(store.read(&imported.key).await.unwrap(), b"legacy");
     assert!(import_legacy_file(
@@ -99,8 +102,8 @@ async fn legacy_path_references_import_only_from_allowed_roots() {
         &legacy,
         "artifacts/b/v1.pdf",
     )
-        .await
-        .is_err());
+    .await
+    .is_err());
 
     let backend = MemoryStorage::new();
     let blob_store = BlobFileStore::new(backend.for_scope(&Scope::local()).unwrap());
@@ -112,5 +115,8 @@ async fn legacy_path_references_import_only_from_allowed_roots() {
     )
     .await
     .unwrap();
-    assert_eq!(blob_store.read(&imported_blob.key).await.unwrap(), b"legacy");
+    assert_eq!(
+        blob_store.read(&imported_blob.key).await.unwrap(),
+        b"legacy"
+    );
 }

@@ -13,9 +13,8 @@ use serde_json::json;
 use tiny_artifacts::{
     ArtifactAuthor, ArtifactEvent, ArtifactEventKind, ArtifactKind, ArtifactObserver,
     ArtifactPublisher, ArtifactRecord, ArtifactStatus, ArtifactStore, ArtifactVersion, Artifacts,
-    FsFileStore,
     ArtifactsError, Author, Content, CreateArtifactTool, DeleteArtifactTool, FileRefError,
-    FileRoots, PublishOptions, PublishedLink, ShareArtifactTool, UpdateArtifactTool,
+    FileRoots, FsFileStore, PublishOptions, PublishedLink, ShareArtifactTool, UpdateArtifactTool,
 };
 use tinytools::Tool;
 
@@ -198,8 +197,8 @@ async fn a_file_that_is_missing_a_directory_or_outside_is_refused() {
 
     let root = workdir();
     std::fs::write(root.join("x"), b"file").unwrap();
-    let without_file_store = Artifacts::new(Arc::new(MemStore::default()))
-        .with_file_roots(FileRoots::new([root]));
+    let without_file_store =
+        Artifacts::new(Arc::new(MemStore::default())).with_file_roots(FileRoots::new([root]));
     let err = without_file_store
         .create(
             ArtifactKind::File,

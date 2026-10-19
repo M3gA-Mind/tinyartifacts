@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use tiny_artifacts::{
     ArtifactKind, ArtifactPublisher, ArtifactRecord, ArtifactStore, ArtifactVersion, Artifacts,
-    Author, BlobFileStore, Content, FileRoots, PublishOptions, PublishedLink,
+    Author, BlobFileStore, Content, FileRoots, FileStore, PublishOptions, PublishedLink,
 };
 use tinystoragedrivers_core::{BlobStore, MemoryStorage, Scope, StorageBackend};
 
@@ -95,7 +95,18 @@ async fn separate_services_read_share_and_delete_shared_file_versions() {
         .unwrap()
         .record
         .id;
-    let first_key = first.get(&id).await.unwrap().unwrap().version(1).unwrap().file.as_ref().unwrap().key.clone();
+    let first_key = first
+        .get(&id)
+        .await
+        .unwrap()
+        .unwrap()
+        .version(1)
+        .unwrap()
+        .file
+        .as_ref()
+        .unwrap()
+        .key
+        .clone();
 
     std::fs::write(input.join("report.pdf"), b"version two").unwrap();
     first
@@ -128,5 +139,9 @@ async fn separate_services_read_share_and_delete_shared_file_versions() {
     );
 
     assert!(second.delete(&id).await.unwrap().0);
-    assert!(first_blobs.list("artifacts/shared-report/").await.unwrap().is_empty());
+    assert!(first_blobs
+        .list("artifacts/shared-report/")
+        .await
+        .unwrap()
+        .is_empty());
 }

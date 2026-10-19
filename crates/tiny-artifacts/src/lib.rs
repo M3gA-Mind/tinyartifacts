@@ -42,8 +42,8 @@ pub mod file_store;
 pub mod fs_store;
 pub mod publish;
 pub mod service;
-pub mod store;
 pub mod storage;
+pub mod store;
 pub mod tools;
 pub mod types;
 
@@ -54,8 +54,8 @@ pub use file_store::{import_legacy_file, BlobFileStore, FileMetadata, FileStore,
 pub use fs_store::FsArtifactStore;
 pub use publish::{ArtifactPublisher, PublishOptions};
 pub use service::{Artifacts, ArtifactsError, Author, Content, Published, Saved};
-pub use store::ArtifactStore;
 pub use storage::storage_schema;
+pub use store::ArtifactStore;
 pub use tools::{
     registered_tools, CreateArtifactTool, DeleteArtifactTool, ListArtifactsTool, ReadArtifactTool,
     ShareArtifactTool, UpdateArtifactTool,

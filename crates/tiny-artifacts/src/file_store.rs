@@ -24,12 +24,7 @@ pub trait FileStore: Send + Sync {
     /// # Errors
     ///
     /// Returns an error when the key is invalid or storage fails.
-    async fn put(
-        &self,
-        key: &str,
-        bytes: &[u8],
-        media_type: Option<&str>,
-    ) -> Result<FileMetadata>;
+    async fn put(&self, key: &str, bytes: &[u8], media_type: Option<&str>) -> Result<FileMetadata>;
     /// Read the complete object at `key`.
     ///
     /// # Errors
@@ -68,18 +63,15 @@ impl BlobFileStore {
 
 impl std::fmt::Debug for BlobFileStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BlobFileStore").field("blobs", &self.blobs).finish()
+        f.debug_struct("BlobFileStore")
+            .field("blobs", &self.blobs)
+            .finish()
     }
 }
 
 #[async_trait]
 impl FileStore for BlobFileStore {
-    async fn put(
-        &self,
-        key: &str,
-        bytes: &[u8],
-        media_type: Option<&str>,
-    ) -> Result<FileMetadata> {
+    async fn put(&self, key: &str, bytes: &[u8], media_type: Option<&str>) -> Result<FileMetadata> {
         validate_key(key)?;
         let content_type = media_type.or_else(|| crate::media_type_for(Path::new(key)));
         let meta = self.blobs.put(key, bytes.to_vec(), content_type).await?;
@@ -155,12 +147,7 @@ impl FsFileStore {
 
 #[async_trait]
 impl FileStore for FsFileStore {
-    async fn put(
-        &self,
-        key: &str,
-        bytes: &[u8],
-        media_type: Option<&str>,
-    ) -> Result<FileMetadata> {
+    async fn put(&self, key: &str, bytes: &[u8], media_type: Option<&str>) -> Result<FileMetadata> {
         let path = self.path(key, true).await?;
         let parent = path.parent().context("file key has no parent")?;
         let staging = parent.join(format!(".{}.tmp", uuid::Uuid::new_v4()));
@@ -228,19 +215,15 @@ impl FileStore for FsFileStore {
     }
 }
 
-fn metadata_for(key: &str, size: usize) -> FileMetadata {
-    FileMetadata {
-        size_bytes: u64::try_from(size).unwrap_or(u64::MAX),
-        media_type: crate::media_type_for(Path::new(key)).map(str::to_owned),
-    }
-}
-
 fn validate_key(key: &str) -> Result<()> {
     if key.is_empty() || key.starts_with('/') || key.contains('\\') || key.contains('\0') {
         bail!("invalid file key {key:?}");
     }
     if Path::new(key).components().any(|part| {
-        matches!(part, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+        matches!(
+            part,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
     }) {
         bail!("file key must stay inside the store: {key:?}");
     }
@@ -271,7 +254,10 @@ pub async fn import_legacy_file(
 ) -> Result<FileRef> {
     let source = roots.resolve(&legacy.key).await?;
     let bytes = tokio::fs::read(&source.path).await?;
-    let media_type = legacy.media_type.as_deref().or(source.media_type.as_deref());
+    let media_type = legacy
+        .media_type
+        .as_deref()
+        .or(source.media_type.as_deref());
     let metadata = store.put(key, &bytes, media_type).await?;
     Ok(FileRef {
         key: key.to_owned(),
