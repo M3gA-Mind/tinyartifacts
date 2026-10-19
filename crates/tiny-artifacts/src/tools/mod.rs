@@ -99,7 +99,7 @@ pub(crate) fn saved_result(saved: &Saved) -> ToolResult {
         "appended": saved.appended,
     });
     if let Some(file) = saved.record.latest().and_then(|v| v.file.as_ref()) {
-        out["path"] = json!(file.path);
+        out["file_key"] = json!(file.key);
     }
     if let Some(notice) = &saved.notice {
         out["notice"] = json!(notice);

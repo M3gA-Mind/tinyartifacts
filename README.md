@@ -21,7 +21,7 @@ through four small ports.
 | `ArtifactVersion` | 1-based number, body, author (`agent` / `operator`) and author id, an optional note, an optional `FileRef`, and the link it was shared under |
 | `ArtifactKind` | `text`, `markdown`, `html` hold their content; `image`, `file` hold a reference to a file |
 | `ArtifactStatus` | `pending` (being produced), `ready`, `failed` (with an error) |
-| `FileRef` | a checked file: canonical path, size, media type |
+| `FileRef` | a stored file: opaque key, size, media type |
 
 Every field added since the first release defaults when absent, so records
 written by earlier versions keep loading.
@@ -32,11 +32,14 @@ All creation and change goes through one service, `Artifacts`:
 
 ```rust
 use std::sync::Arc;
-use tiny_artifacts::{Artifacts, ArtifactKind, Author, Content, FileRoots, FsArtifactStore};
+use tiny_artifacts::{
+    Artifacts, ArtifactKind, Author, Content, FileRoots, FsArtifactStore, FsFileStore,
+};
 
 # async fn demo() -> Result<(), tiny_artifacts::ArtifactsError> {
 let artifacts = Artifacts::new(Arc::new(FsArtifactStore::new("data/artifacts")))
-    .with_file_roots(FileRoots::new(["/path/to/agent/workspace".into()]));
+    .with_file_roots(FileRoots::new(["/path/to/agent/workspace".into()]))
+    .with_file_store(Arc::new(FsFileStore::new("data/artifact-files")));
 
 // A text artifact, then a human edit of it.
 let saved = artifacts
@@ -62,13 +65,14 @@ The service enforces the rules, whoever is calling:
   appends nothing.
 - **Slow producers** open an artifact with `begin` (status `pending`, no
   version yet), then `revise` to complete it or `fail` it with a reason.
-- **File versions keep their bytes** with `with_version_files(dir)`: each
-  file version is copied to `<dir>/<id>/v<N>.<ext>` and points at the copy, so
-  a producer that overwrites the same file for its next version does not change
-  the earlier ones. Deleting an artifact removes its copies.
-- **Sharing** (`publish`) records the link on the version it shared and reuses
-  a live link instead of sharing again. Without version files, an older file
-  version is refused once its file has changed.
+- **File versions keep their bytes** through `FileStore`: each version is
+  written under `artifacts/files/<id>/v<N>.<ext>` and its record carries the
+  storage key, so a producer that overwrites its input file does not change
+  earlier versions. Deleting an artifact removes every object under its key
+  prefix.
+- **Sharing** (`publish`) checks the stored object through `FileStore`, records
+  the link on the version it shared and reuses a live link instead of sharing
+  again. A host publisher can read the same object by its `FileRef` key.
 
 ## Ports a host implements
 
@@ -77,7 +81,14 @@ The service enforces the rules, whoever is calling:
 | `ArtifactStore` | Where records are kept. `FsArtifactStore` is a ready-made one: one JSON file per artifact in a directory, written atomically. |
 | `ArtifactObserver` | Told after every write (`pending`, `ready`, `failed`, `deleted`) — show a card, copy the file where the user can open it. If it fails, the write stands and the caller gets a notice. |
 | `ArtifactPublisher` | How a version is shared (e.g. an upload and a link). Optional. |
-| `FileRoots` | The folders file artifacts may point into. Without any, file artifacts are refused. `with_guard` lets the host refuse paths inside them (credential stores, its own data). |
+| `FileStore` | Durable file bytes behind `FileRef` keys. Implement it for a host's blob backend, or use `BlobFileStore` to adapt the `BlobStore` port. |
+| `FsFileStore` | Filesystem implementation of `FileStore`, useful for a single-host install or local development. |
+| `FileRoots` | Allowed input folders. Paths are canonicalized and checked before a file store reads them; `with_guard` can refuse paths inside them (credential stores, its own data). |
+
+Older records that serialized `FileRef.path` still deserialize. A host importing
+those records into any file store can use `tiny_artifacts::import_legacy_file`
+with the old allowed roots; the imported record should then be saved with the
+new key returned by that function.
 
 ## Agent tools
 
