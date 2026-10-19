@@ -5,7 +5,8 @@ use tinystoragedrivers_core::schema::{Owner, Schema, ScopeClass};
 /// Declare the blob namespace used by [`crate::BlobFileStore`].
 ///
 /// Hosts compose this with their other storage schemas so the driver can
-/// reserve the `artifacts/` prefix in the same scope used for artifact data.
+/// reserve the `artifacts/files/` prefix in the same scope used for artifact
+/// data.
 ///
 /// # Panics
 ///
@@ -17,7 +18,7 @@ use tinystoragedrivers_core::schema::{Owner, Schema, ScopeClass};
 )]
 pub fn storage_schema() -> Schema {
     Schema::new(Owner::new("artifacts").expect("`artifacts` is a valid owner"))
-        .blobs("artifacts/", ScopeClass::Tenant)
+        .blobs("artifacts/files/", ScopeClass::Tenant)
 }
 
 #[cfg(test)]

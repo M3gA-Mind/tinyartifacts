@@ -13,22 +13,25 @@ async fn filesystem_store_reads_metadata_and_deletes_by_artifact_prefix() {
     let root = temp_dir();
     let store = FsFileStore::new(&root);
     let metadata = store
-        .put("artifacts/a/v1.png", b"png bytes", None)
+        .put("artifacts/files/a/v1.png", b"png bytes", None)
         .await
         .unwrap();
 
     assert_eq!(metadata.size_bytes, 9);
     assert_eq!(metadata.media_type.as_deref(), Some("image/png"));
     assert_eq!(
-        store.read("artifacts/a/v1.png").await.unwrap(),
+        store.read("artifacts/files/a/v1.png").await.unwrap(),
         b"png bytes"
     );
     assert_eq!(
-        store.metadata("artifacts/a/v1.png").await.unwrap(),
+        store.metadata("artifacts/files/a/v1.png").await.unwrap(),
         Some(metadata)
     );
-    store.delete_prefix("artifacts/a/").await.unwrap();
-    assert_eq!(store.metadata("artifacts/a/v1.png").await.unwrap(), None);
+    store.delete_prefix("artifacts/files/a/").await.unwrap();
+    assert_eq!(
+        store.metadata("artifacts/files/a/v1.png").await.unwrap(),
+        None
+    );
 }
 
 #[tokio::test]
@@ -41,13 +44,19 @@ async fn blob_adapters_share_objects_across_instances() {
     let second = BlobFileStore::new(&second_storage);
 
     first
-        .put("artifacts/a/v1.txt", b"notes", None)
+        .put("artifacts/files/a/v1.txt", b"notes", None)
         .await
         .unwrap();
 
-    assert_eq!(second.read("artifacts/a/v1.txt").await.unwrap(), b"notes");
-    second.delete_prefix("artifacts/a/").await.unwrap();
-    assert_eq!(first.metadata("artifacts/a/v1.txt").await.unwrap(), None);
+    assert_eq!(
+        second.read("artifacts/files/a/v1.txt").await.unwrap(),
+        b"notes"
+    );
+    second.delete_prefix("artifacts/files/a/").await.unwrap();
+    assert_eq!(
+        first.metadata("artifacts/files/a/v1.txt").await.unwrap(),
+        None
+    );
 }
 
 #[tokio::test]
@@ -93,17 +102,17 @@ async fn legacy_path_references_import_only_from_allowed_roots() {
         &store,
         &FileRoots::new([old_root.clone()]),
         &legacy,
-        "artifacts/a/v1.pdf",
+        "artifacts/files/a/v1.pdf",
     )
     .await
     .unwrap();
-    assert_eq!(imported.key, "artifacts/a/v1.pdf");
+    assert_eq!(imported.key, "artifacts/files/a/v1.pdf");
     assert_eq!(store.read(&imported.key).await.unwrap(), b"legacy");
     assert!(import_legacy_file(
         &store,
         &FileRoots::new([temp_dir()]),
         &legacy,
-        "artifacts/b/v1.pdf",
+        "artifacts/files/b/v1.pdf",
     )
     .await
     .is_err());
@@ -115,7 +124,7 @@ async fn legacy_path_references_import_only_from_allowed_roots() {
         &blob_store,
         &FileRoots::new([old_root]),
         &legacy,
-        "artifacts/cloud/v1.pdf",
+        "artifacts/files/cloud/v1.pdf",
     )
     .await
     .unwrap();

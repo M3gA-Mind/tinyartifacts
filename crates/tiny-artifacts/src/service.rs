@@ -463,7 +463,7 @@ impl Artifacts {
             Some(ext) => format!("v{}.{ext}", version.version),
             None => format!("v{}", version.version),
         };
-        let key = format!("artifacts/{id}/{name}");
+        let key = format!("artifacts/files/{id}/{name}");
         let bytes = tokio::fs::read(&source.path)
             .await
             .map_err(anyhow::Error::from)?;
@@ -495,7 +495,10 @@ impl Artifacts {
         if crate::fs_store::validate_id(id).is_err() {
             return;
         }
-        match file_store.delete_prefix(&format!("artifacts/{id}/")).await {
+        match file_store
+            .delete_prefix(&format!("artifacts/files/{id}/"))
+            .await
+        {
             Ok(()) => {}
             Err(err) => tracing::warn!(
                 target: "tiny-artifacts",

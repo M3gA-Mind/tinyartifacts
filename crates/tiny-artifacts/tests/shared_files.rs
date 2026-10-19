@@ -140,7 +140,7 @@ async fn separate_services_read_share_and_delete_shared_file_versions() {
 
     assert!(second.delete(&id).await.unwrap().0);
     assert!(first_blobs
-        .list("artifacts/shared-report/")
+        .list("artifacts/files/shared-report/")
         .await
         .unwrap()
         .is_empty());

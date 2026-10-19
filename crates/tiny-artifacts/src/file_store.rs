@@ -135,9 +135,19 @@ impl FsFileStore {
         if create_parent {
             tokio::fs::create_dir_all(parent).await?;
         }
-        let canonical_parent = tokio::fs::canonicalize(parent)
-            .await
-            .with_context(|| format!("cannot resolve parent of {}", path.display()))?;
+        let canonical_parent = match tokio::fs::canonicalize(parent).await {
+            Ok(parent) => parent,
+            Err(error)
+                if !create_parent && error.kind() == std::io::ErrorKind::NotFound =>
+            {
+                return Ok(root.join(key));
+            }
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("cannot resolve parent of {}", path.display())
+                });
+            }
+        };
         if !canonical_parent.starts_with(&root) {
             bail!("file key escapes the configured store root: {key:?}");
         }
