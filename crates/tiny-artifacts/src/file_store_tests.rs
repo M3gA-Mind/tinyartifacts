@@ -74,7 +74,15 @@ async fn blob_store_reports_missing_objects_and_rejects_invalid_keys_and_prefixe
     assert!(store.metadata("/absolute").await.is_err());
     assert!(store.read("bad\\key").await.is_err());
     assert!(store.delete_prefix("").await.is_err());
+    store
+        .put("artifacts/files/sibling/v1.txt", b"keep", None)
+        .await
+        .unwrap();
     assert!(store.delete_prefix("../").await.is_err());
+    assert_eq!(
+        store.read("artifacts/files/sibling/v1.txt").await.unwrap(),
+        b"keep"
+    );
     store
         .delete_prefix("artifacts/files/missing/")
         .await
@@ -86,7 +94,15 @@ async fn filesystem_store_refuses_traversal_keys() {
     let store = FsFileStore::new(temp_dir());
     assert!(store.put("../outside", b"bad", None).await.is_err());
     assert!(store.read("/absolute").await.is_err());
+    store
+        .put("artifacts/files/sibling/v1.txt", b"keep", None)
+        .await
+        .unwrap();
     assert!(store.delete_prefix("../").await.is_err());
+    assert_eq!(
+        store.read("artifacts/files/sibling/v1.txt").await.unwrap(),
+        b"keep"
+    );
 }
 
 #[tokio::test]
@@ -214,11 +230,19 @@ async fn legacy_import_respects_host_guards_and_infers_missing_media_type() {
     .unwrap();
     let store = FsFileStore::new(temp_dir());
     let guarded_roots = FileRoots::new([root]).with_guard(|_| Some("blocked by test".into()));
+    store
+        .put("artifacts/files/a/v1.txt", b"preserve me", None)
+        .await
+        .unwrap();
 
     assert!(
         import_legacy_file(&store, &guarded_roots, &legacy, "artifacts/files/a/v1.txt")
             .await
             .is_err()
+    );
+    assert_eq!(
+        store.read("artifacts/files/a/v1.txt").await.unwrap(),
+        b"preserve me"
     );
     let allowed = FileRoots::new([Path::new(&legacy.key).parent().unwrap().to_path_buf()]);
     let imported = import_legacy_file(&store, &allowed, &legacy, "artifacts/files/a/v1.txt")
