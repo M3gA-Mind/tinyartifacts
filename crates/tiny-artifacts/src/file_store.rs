@@ -137,15 +137,12 @@ impl FsFileStore {
         }
         let canonical_parent = match tokio::fs::canonicalize(parent).await {
             Ok(parent) => parent,
-            Err(error)
-                if !create_parent && error.kind() == std::io::ErrorKind::NotFound =>
-            {
+            Err(error) if !create_parent && error.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(root.join(key));
             }
             Err(error) => {
-                return Err(error).with_context(|| {
-                    format!("cannot resolve parent of {}", path.display())
-                });
+                return Err(error)
+                    .with_context(|| format!("cannot resolve parent of {}", path.display()));
             }
         };
         if !canonical_parent.starts_with(&root) {
