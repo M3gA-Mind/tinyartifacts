@@ -38,7 +38,7 @@ pub trait FileStore: Send + Sync {
     ///
     /// Returns an error when the key is invalid or storage fails.
     async fn metadata(&self, key: &str) -> Result<Option<FileMetadata>>;
-    /// Remove every object whose key starts with `prefix`.
+    /// Remove every object below the directory `prefix`, which must end in `/`.
     ///
     /// # Errors
     ///
@@ -260,6 +260,9 @@ fn validate_key(key: &str) -> Result<()> {
 fn validate_prefix(prefix: &str) -> Result<()> {
     if prefix.is_empty() {
         bail!("file key prefix is empty");
+    }
+    if !prefix.ends_with('/') {
+        bail!("file key directory prefix must end with `/`: {prefix:?}");
     }
     validate_key(prefix.trim_end_matches('/'))
 }
