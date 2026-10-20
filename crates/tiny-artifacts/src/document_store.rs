@@ -78,7 +78,10 @@ impl DocumentArtifactStore {
                 else {
                     return Err(error.into());
                 };
-                if existing.meta.schema == SCHEMA_VERSION && existing.doc == body {
+                if existing.meta.schema == SCHEMA_VERSION
+                    && existing.meta.expires_ms.is_none()
+                    && existing.doc == body
+                {
                     Ok(false)
                 } else {
                     Err(StorageError::conflict(

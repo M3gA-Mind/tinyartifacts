@@ -113,6 +113,57 @@ async fn legacy_import_conflict_only_accepts_identical_schema_and_body() {
 }
 
 #[tokio::test]
+async fn legacy_import_rejects_matching_target_with_expiry() {
+    let storage = storage("artifact-import-expiry-test");
+    let store = DocumentArtifactStore::open(&storage).await.unwrap();
+    let legacy = include_bytes!("../tests/fixtures/previous-release-1.json");
+    let source_dir = std::env::current_dir()
+        .unwrap()
+        .join("target/test-fixtures")
+        .join(format!("artifact-import-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&source_dir).unwrap();
+    let source_path = source_dir.join("previous-release-1.json");
+    std::fs::write(&source_path, legacy).unwrap();
+    let source_bytes = std::fs::read(&source_path).unwrap();
+    let record: ArtifactRecord = serde_json::from_slice(legacy).unwrap();
+    let body = serde_json::to_value(&record).unwrap();
+    storage
+        .documents()
+        .put_with(
+            ARTIFACTS_COLLECTION,
+            &record.id,
+            body.clone(),
+            Precondition::Absent,
+            WriteOptions::new()
+                .schema(SCHEMA_VERSION)
+                .expires_ms(i64::MAX),
+        )
+        .await
+        .unwrap();
+
+    let error = store
+        .import_legacy_record_json(&source_bytes)
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.downcast_ref::<StorageError>().unwrap().kind(),
+        ErrorKind::Conflict
+    );
+    let existing = storage
+        .documents()
+        .get(ARTIFACTS_COLLECTION, &record.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(existing.doc, body);
+    assert_eq!(existing.meta.schema, SCHEMA_VERSION);
+    assert_eq!(existing.meta.expires_ms, Some(i64::MAX));
+    assert_eq!(std::fs::read(source_path).unwrap(), source_bytes);
+    std::fs::remove_dir_all(source_dir).unwrap();
+}
+
+#[tokio::test]
 async fn legacy_import_rejects_identical_body_without_declared_schema() {
     let storage = storage("artifact-import-undeclared-schema-test");
     let store = DocumentArtifactStore::open(&storage).await.unwrap();
