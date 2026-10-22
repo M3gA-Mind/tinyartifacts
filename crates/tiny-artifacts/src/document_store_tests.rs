@@ -224,7 +224,7 @@ async fn list_skips_corrupt_records_while_get_reports_them() {
         .await
         .unwrap();
 
-    assert!(store.list().await.unwrap().is_empty());
+    assert_eq!(store.list().await.unwrap(), Vec::<ArtifactRecord>::new());
     assert!(store.get("corrupt").await.is_err());
 }
 
